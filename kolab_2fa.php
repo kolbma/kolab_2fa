@@ -166,7 +166,7 @@ class kolab_2fa extends rcube_plugin
                 list($method) = explode(':', $factor, 2);
 
                 // verify the submitted code
-                $code = rcube_utils::get_input_value("_${nonce}_${method}", rcube_utils::INPUT_POST);
+                $code = rcube_utils::get_input_value("_{$nonce}_{$method}", rcube_utils::INPUT_POST);
                 $this->login_verified = $this->verify_factor_auth($factor, $code);
 
                 // accept first successful method
@@ -251,7 +251,7 @@ class kolab_2fa extends rcube_plugin
 
             $field_id = "rcmlogin2fa$method";
             $input_code = new html_inputfield(array(
-                    'name'         => "_${nonce}_${method}",
+                    'name'         => "_{$nonce}_{$method}",
                     'class'        => 'kolab2facode',
                     'id'           => $field_id,
                     'required'     => $required,

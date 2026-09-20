@@ -23,17 +23,17 @@
 
 namespace Kolab2FA\Storage;
 
-use \rcmail;
-use \rcube_user;
+use rcmail;
+use rcube_user;
 
 class RcubeUser extends Base
 {
     // sefault config
-    protected $config = array(
-        'keymap' => array(),
-    );
+    protected $config = [
+        'keymap' => [],
+    ];
 
-    private $cache = array();
+    private $cache = [];
     private $user;
 
     public function init(array $config)
@@ -50,12 +50,12 @@ class RcubeUser extends Base
     public function enumerate()
     {
         if ($factors = $this->get_factors()) {
-            return array_keys(array_filter($factors, function($prop) {
+            return array_keys(array_filter($factors, function ($prop) {
                 return !empty($prop['active']);
             }));
         }
 
-        return array();
+        return [];
     }
 
     /**
@@ -63,10 +63,10 @@ class RcubeUser extends Base
      */
     public function read($key)
     {
-        if (!isset($this->cache[$key])) {
+        if (!array_key_exists($key, $this->cache)) {
             $factors = $this->get_factors();
-            $this->log(LOG_DEBUG, 'RcubeUser::read() ' . $key);
-            $this->cache[$key] = $factors[$key];
+            $this->log(LOG_DEBUG, "RcubeUser::read({$key})");
+            $this->cache[$key] = $factors[$key] ?? null;
         }
 
         return $this->cache[$key];
@@ -77,7 +77,7 @@ class RcubeUser extends Base
      */
     public function write($key, $value)
     {
-        $this->log(LOG_DEBUG, 'RcubeUser::write() ' . @json_encode($value));
+        $this->log(LOG_DEBUG, "RcubeUser::write({$key}) " . @json_encode($value));
 
         if ($user = $this->get_user($this->username)) {
             $this->cache[$key] = $value;
@@ -85,8 +85,6 @@ class RcubeUser extends Base
             $factors = $this->get_factors();
             $factors[$key] = $value;
 
-            $pkey = $this->key2property('blob');
-            $save_data = array($pkey => $factors);
             $update_index = false;
 
             // remove entry
@@ -95,17 +93,20 @@ class RcubeUser extends Base
                 $update_index = true;
             }
             // remove non-active entries
-            else if (!empty($value['active'])) {
-                $factors = array_filter($factors, function($prop) {
+            elseif (!empty($value['active'])) {
+                $factors = array_filter($factors, function ($prop) {
                     return !empty($prop['active']);
                 });
                 $update_index = true;
             }
 
+            $pkey = $this->key2property('blob');
+            $save_data = [$pkey => $factors];
+
             // update the index of active factors
             if ($update_index) {
                 $save_data[$this->key2property('factors')] = array_keys(
-                    array_filter($factors, function($prop) {
+                    array_filter($factors, function ($prop) {
                         return !empty($prop['active']);
                     })
                 );
@@ -139,7 +140,7 @@ class RcubeUser extends Base
         parent::set_username($username);
 
         // reset cached values
-        $this->cache = array();
+        $this->cache = [];
         $this->user = null;
     }
 
@@ -172,7 +173,7 @@ class RcubeUser extends Base
     {
         if ($user = $this->get_user($this->username)) {
             $prefs = $user->get_prefs();
-            return (array)$prefs[$this->key2property('blob')];
+            return (array) ($prefs[$this->key2property('blob')] ?? []);
         }
 
         return null;
@@ -191,5 +192,4 @@ class RcubeUser extends Base
         // default
         return 'kolab_2fa_' . $key;
     }
-
 }

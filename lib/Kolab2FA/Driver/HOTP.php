@@ -27,12 +27,13 @@ class HOTP extends Base
 {
     public $method = 'hotp';
 
-    protected $config = array(
+    protected $config = [
         'digits'   => 6,
         'window'   => 4,
         'digest'   => 'sha1',
-    );
+    ];
 
+    protected $config_keys = ['digits', 'digest'];
     protected $backend;
 
     /**
@@ -42,28 +43,43 @@ class HOTP extends Base
     {
         parent::init($config);
 
-        $this->user_settings += array(
-            'secret' => array(
+        $this->user_settings += [
+            'secret' => [
                 'type'      => 'text',
                 'private'   => true,
                 'label'     => 'secret',
                 'generator' => 'generate_secret',
-            ),
-            'counter' => array(
+            ],
+            'counter' => [
                 'type'      => 'integer',
                 'editable'  => false,
                 'hidden'    => true,
                 'generator' => 'random_counter',
-            ),
-        );
+            ],
+        ];
+
+        if (!in_array($this->config['digest'], ['md5', 'sha1', 'sha256', 'sha512'])) {
+            throw new \Exception("'{$this->config['digest']}' digest is not supported.");
+        }
+
+        if (!is_numeric($this->config['digits']) || $this->config['digits'] < 1) {
+            throw new \Exception('Digits must be at least 1.');
+        }
+
+        if ($this->hasSemicolon($this->config['issuer'])) {
+            throw new \Exception('Issuer must not contain a semi-colon.');
+        }
 
         // copy config options
-        $this->backend = new \Kolab2FA\OTP\HOTP();
-        $this->backend
-            ->setDigits($this->config['digits'])
-            ->setDigest($this->config['digest'])
-            ->setIssuer($this->config['issuer'])
-            ->setIssuerIncludedAsParameter(true);
+        $this->backend = \OTPHP\HOTP::create(
+            null, // secret
+            0, // counter
+            $this->config['digest'], // digest
+            $this->config['digits'] // digits
+        );
+
+        $this->backend->setIssuer($this->config['issuer']);
+        $this->backend->setIssuerIncludedAsParameter(true);
     }
 
     /**
@@ -73,38 +89,33 @@ class HOTP extends Base
     {
         // get my secret from the user storage
         $secret  = $this->get('secret');
-        $counter = $this->get('counter');
 
         if (!strlen($secret)) {
-            // LOG: "no secret set for user $this->username"
-            // rcube::console("VERIFY HOTP: no secret set for user $this->username");
             return false;
         }
 
         try {
-            $this->backend->setLabel($this->username)->setSecret($secret)->setCounter(intval($this->get('counter')));
-            $pass = $this->backend->verify($code, $counter, $this->config['window']);
+            $this->backend->setLabel($this->get('username'));
+            $this->backend->setSecret($secret);
+
+            $pass = $this->backend->verify($code, $this->get('counter'), (int) $this->config['window']);
 
             // store incremented counter value
             $this->set('counter', $this->backend->getCounter());
             $this->commit();
-        }
-        catch (\Exception $e) {
-            // LOG: exception
-            // rcube::console("VERIFY HOTP: $this->id, " . strval($e));
+        } catch (\Exception $e) {
             $pass = false;
         }
 
-        // rcube::console('VERIFY HOTP', $this->username, $secret, $counter, $code, $pass);
         return $pass;
     }
 
     /**
-     *
+     * Get the provisioning URI.
      */
     public function get_provisioning_uri()
     {
-        if (!$this->secret) {
+        if (!$this->get('secret')) {
             // generate new secret and store it
             $this->set('secret', $this->get('secret', true));
             $this->set('counter', $this->get('counter', true));
@@ -114,7 +125,10 @@ class HOTP extends Base
 
         // TODO: deny call if already active?
 
-        $this->backend->setLabel($this->username)->setSecret($this->secret)->setCounter(intval($this->get('counter')));
+        $this->backend->setLabel($this->get('username'));
+        $this->backend->setSecret($this->get('secret'));
+        $this->backend->setCounter(intval($this->get('counter')));
+
         return $this->backend->getProvisioningUri();
     }
 
